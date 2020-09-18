@@ -1,0 +1,38 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      java: corretto8
+    commands:
+      - python2.7 -m amazon_linux_extras enable docker
+      - yum install --assumeyes amazon-ecr-credential-helper openssl
+
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - $(aws ecr get-login --no-include-email --region $AWS_DEFAULT_REGION)
+
+  build:
+    commands:
+      - echo Building and pushing the docker image ...
+      - IMAGE_TAG="${CODEBUILD_RESOLVED_SOURCE_VERSION}"
+      - echo "{\"Tag\":\"${TAG}\"}" | jq . > parameters.json
+
+
+      - docker build -t $IMAGE_REPO_NAME:$IMAGE_TAG .
+      - docker tag $IMAGE_REPO_NAME:$IMAGE_TAG $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG      
+
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing the Docker image...
+      - docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$IMAGE_TAG
+      
+
+artifacts:
+  discard-paths: yes
+  files:
+    - infra/cf-template.yaml
+    - infra/cf-template.config
+    - parameters.json

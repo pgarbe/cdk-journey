@@ -1,0 +1,305 @@
+AWSTemplateFormatVersion: 2010-09-09
+#
+# Change the Description to be a suitable description for your service
+#
+Description: Hello Service
+
+Parameters:
+  Repository:
+    Type: String
+    Description: Docker image ECR repository URI.
+  Tag:
+    Type: String
+    Description: Docker image ECR tag
+  DesiredCount:
+    Type: Number
+    Description: The number of simultaneous tasks that you want to run on the cluster.
+  EnableDataDog:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: false
+  DataDogApiKey:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rio/config/datadog-integration/api-key
+  DataDogAppKey:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rio/config/datadog-integration/application-key
+  DatadogSite:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rio/config/datadog-integration/site
+  TeamName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /config/team/name
+
+Mappings:
+  #
+  # Change the Config parameters below to match your service
+  #
+  Config:
+    Service:
+      Name: hello-service                 # Change the service name to match your service name
+      Cpu: 960                            # Should be sufficient for most cases but change if you are experiencing CPU problems
+      Memory: 1920                        # Should be sufficient for most cases but change if you are experiencing memory problems
+      FQDN: api.hello.template.rio.cloud  # Change this to be of the format api.<CONTEXT>.rio.cloud where <CONTEXT> is the context name of your service
+    DataDogAgent:
+      Name: hello-service-statsd          # Change this to be the statsd name for your service
+      Cpu: 64
+      Memory: 128
+    Fargate:
+      Cpu: 1024                           # Should be the sum of Service CPU and DataDogAgent CPU (e.g. 960 + 64)
+      Memory: 2048                        # Should be the sum of Service Memory and DataDogAgent Memory (e.g. 1920 + 128)
+    Account:
+      Name: rio-template                  # Change this to be name of the AWS account your service will run under
+
+Resources:
+  FargateExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  ECSServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:DescribeParameters
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource:
+                  - !Sub
+                    - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/config/${ServiceName}*
+                    - ServiceName: !FindInMap [Config, Service, Name]
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/config/application*
+              - Effect: Allow
+                Action:
+                  - secretsmanager:ListSecrets
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  -  dynamodb:Query
+                  -  dynamodb:Get*
+                Resource:
+                - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/permissions/*
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !FindInMap [Config, Service, Name]
+      RetentionInDays: 7
+  StatsdLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !FindInMap [Config, DataDogAgent, Name]
+      RetentionInDays: 7
+  LambdaExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !ImportValue custom-resource-datadog-logforwarder-function-arn
+      Principal: !Sub "logs.${AWS::Region}.amazonaws.com"
+      SourceArn: !GetAtt LogGroup.Arn
+  LogFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    DependsOn: LambdaExecutionPermission
+    Properties:
+      DestinationArn: !ImportValue custom-resource-datadog-logforwarder-function-arn
+      FilterPattern: ""
+      LogGroupName: !Ref LogGroup
+  StatsdLambdaExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !ImportValue custom-resource-datadog-logforwarder-function-arn
+      Principal: !Sub "logs.${AWS::Region}.amazonaws.com"
+      SourceArn: !GetAtt StatsdLogGroup.Arn
+  StatsdLogFilter:
+    Type: AWS::Logs::SubscriptionFilter
+    DependsOn: StatsdLambdaExecutionPermission
+    Properties:
+      DestinationArn: !ImportValue custom-resource-datadog-logforwarder-function-arn
+      FilterPattern: ""
+      LogGroupName: !Ref StatsdLogGroup
+
+  ServiceTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !FindInMap [Config, Service, Name]
+      Cpu: !FindInMap [ Config, Fargate, Cpu ]
+      Memory: !FindInMap [ Config, Fargate, Memory ]
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !GetAtt FargateExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSServiceRole.Arn
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name: !FindInMap [Config, Service, Name]
+          Cpu: !FindInMap [ Config, Service, Cpu ]
+          Essential: true
+          Image: !Sub ${Repository}:${Tag}
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - curl --fail --insecure https://localhost/actuator/health
+            Interval: 5
+            Retries: 2
+            StartPeriod: 180
+            Timeout: 2
+          Memory: !FindInMap [ Config, Service, Memory ]
+          Ulimits:
+            - Name: nofile
+              SoftLimit: 16384
+              HardLimit: 32768
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !FindInMap [Config, Service, Name]
+          PortMappings:
+            - ContainerPort: 80
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: ListenerRule # Avoid race conditions while creating the service
+    Properties:
+      ServiceName: !FindInMap [Config, Service, Name]
+      Cluster: !Ref Cluster
+      LaunchType: FARGATE
+      PlatformVersion: 1.4.0
+      DesiredCount: !Ref DesiredCount
+      HealthCheckGracePeriodSeconds: 240
+      TaskDefinition: !Ref ServiceTaskDefinition
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+      LoadBalancers:
+        - TargetGroupArn: !Ref ServiceTargetGroup
+          ContainerPort: 80
+          ContainerName: !FindInMap [Config, Service, Name]
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref SecurityGroup
+          Subnets:
+            - !ImportValue PrivateSubnet1AID
+            - !ImportValue PrivateSubnet2AID
+            - !ImportValue PrivateSubnet3AID
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub
+        - ${ServiceName}-task
+        - ServiceName: !FindInMap [Config, Service, Name]
+      VpcId: !ImportValue DefaultVPCId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+
+  ElasticLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref SecurityGroup
+      LoadBalancerAttributes:
+        - Key: deletion_protection.enabled
+          Value: true
+      Subnets:
+        - !ImportValue PublicSubnet1ID
+        - !ImportValue PublicSubnet2ID
+        - !ImportValue PublicSubnet3ID
+      Type: application
+
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref LoadbalancerListener
+      Priority: 2
+      Actions:
+        - TargetGroupArn: !Ref ServiceTargetGroup
+          Type: forward
+
+  LoadbalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ElasticLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      SslPolicy: ELBSecurityPolicy-TLS-1-2-2017-01
+      DefaultActions:
+        - TargetGroupArn: !Ref ServiceTargetGroup
+          Type: forward
+      Certificates:
+        - CertificateArn: !Ref LoadBalancerAcmCertificate
+
+  ServiceTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 5
+      HealthCheckPath: /actuator/health
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 200
+      Port: 443
+      Protocol: HTTPS
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 15
+      UnhealthyThresholdCount: 5
+      VpcId: !ImportValue DefaultVPCId
+      TargetType: ip
+
+  LoadBalancerAcmCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !FindInMap [Config, Service, FQDN]
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !FindInMap [Config, Service, FQDN]
+          HostedZoneId: !ImportValue Landing-Zone-HostedZoneId
+
+  LoadBalancerRecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt ElasticLoadBalancer.DNSName
+        HostedZoneId: !GetAtt ElasticLoadBalancer.CanonicalHostedZoneID
+      HostedZoneId: !ImportValue Landing-Zone-HostedZoneId
+      Comment: A records for service
+      Name: !FindInMap [Config, Service, FQDN]
+      Type: A

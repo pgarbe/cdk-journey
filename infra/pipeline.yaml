@@ -1,0 +1,204 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Mappings:
+  Config:
+    Service:
+      Name: cdk-journey
+
+Resources:
+
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: CodebuildTestReports
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: codebuildTestReports
+                Action:
+                  - codebuild:CreateReportGroup
+                  - codebuild:CreateReport
+                  - codebuild:UpdateReport
+                  - codebuild:BatchPutTestCases
+                Effect: Allow
+                Resource:
+                  - !Sub
+                    - arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/${ServiceName}-*
+                    - ServiceName: !FindInMap [Config, Service, Name]
+
+  CodeDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - cloudformation.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: "Additional_Permissions"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action: "secretsmanager:GetRandomPassword"
+                Resource: "*"
+              - Effect: "Allow"
+                Action: "acm:*"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - rds:AddTagsToResource
+                  - rds:AuthorizeDBSecurityGroupIngress
+                  - rds:CreateDB*
+                  - rds:DeleteDB*
+                  - rds:ModifyDB*
+                  - rds:RemoveTagsFromResource
+                  - rds:RevokeDBSecurityGroupIngress
+                Resource: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:*:*
+              - Effect: "Allow"
+                Action:
+                  - rds:Describe*
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*
+
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec.yaml
+      TimeoutInMinutes: 480
+      Environment:
+        ComputeType: BUILD_GENERAL1_LARGE
+        PrivilegedMode: true
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:1.0
+        Type: LINUX_CONTAINER
+        EnvironmentVariables:
+          - Name: AWS_ACCOUNT_ID
+            Value: !Ref AWS::AccountId
+          - Name: IMAGE_REPO_NAME
+            Value: !Ref Repository
+
+  ArtifactStore:
+    Type: AWS::S3::Bucket
+        
+  Repository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !FindInMap [Config, Service, Name]
+
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactStore
+      RoleArn: !GetAtt  CodePipelineRole.Arn
+      Stages:
+        - Name: GitHub
+          Actions:
+            - Name: SourceAction
+              ActionTypeId: 
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              OutputArtifacts: 
+                - Name: SourceOutput
+              Configuration: 
+                Owner: pgarbe
+                Repo: cdk-journey
+                Branch: master
+                OAuthToken: '{{resolve:secretsmanager:GitHubToken:SecretString}}'
+                PollForSourceChanges: false
+
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              InputArtifacts:
+                - Name: SourceOutput
+              OutputArtifacts:
+                - Name: BuildOutput
+              RunOrder: 1
+        - Name: Deploy
+          Actions:
+            - Name: DeployViaCloudFormation
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              InputArtifacts:
+                - Name: BuildOutput
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                Capabilities: CAPABILITY_IAM,CAPABILITY_AUTO_EXPAND
+                ParameterOverrides: !Sub |
+                  {
+                    "Repository": "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${Repository}" ,
+                    "Tag": {"Fn::GetParam": ["BuildOutput", "parameters.json",  "Tag"]}
+                  }
+                RoleArn: !GetAtt CodeDeployRole.Arn
+                StackName: !FindInMap [Config, Service, Name]
+                TemplatePath: BuildOutput::cf-template.yaml
+                TemplateConfiguration: BuildOutput::cf-template.config
+              RunOrder: 1
+
+  PipelineWebhook:
+    Type: AWS::CodePipeline::Webhook
+    Properties:
+      Authentication: GITHUB_HMAC
+      AuthenticationConfiguration:
+        SecretToken: '{{resolve:secretsmanager:GitHubToken:SecretString}}'
+      Filters:
+        - 
+          JsonPath: "$.ref"
+          MatchEquals: refs/heads/{Branch}
+      TargetPipeline: !Ref CodePipeline
+      TargetAction: SourceAction
+      TargetPipelineVersion: !GetAtt CodePipeline.Version
+      RegisterWithThirdParty: true
