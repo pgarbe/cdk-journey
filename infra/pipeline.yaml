@@ -97,6 +97,12 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
+              - Sid: CloudFormation
+                Action:
+                  - cloudformation:*
+                Effect: Allow
+                Resource:
+                  - '*'
               - Sid: CodeArtifactBucket
                 Action:
                   - s3:*
