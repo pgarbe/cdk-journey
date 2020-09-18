@@ -23,21 +23,17 @@ Resources:
             Action:
               - sts:AssumeRole
       Policies:
-        - PolicyName: CodebuildTestReports
+        - PolicyName: AdditionalPermissions
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Sid: codebuildTestReports
+              - Sid: CodeArtifactBucket
                 Action:
-                  - codebuild:CreateReportGroup
-                  - codebuild:CreateReport
-                  - codebuild:UpdateReport
-                  - codebuild:BatchPutTestCases
+                  - s3:*
                 Effect: Allow
                 Resource:
-                  - !Sub
-                    - arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:report-group/${ServiceName}-*
-                    - ServiceName: !FindInMap [Config, Service, Name]
+                  - !GetAtt ArtifactStore.Arn
+                  - !Sub ${ArtifactStore.Arn}/*
 
   CodeDeployRole:
     Type: AWS::IAM::Role
@@ -96,6 +92,26 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSCodePipelineFullAccess 
+      Policies:
+        - PolicyName: AdditionalPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: CodeArtifactBucket
+                Action:
+                  - s3:*
+                Effect: Allow
+                Resource:
+                  - !GetAtt ArtifactStore.Arn
+                  - !Sub ${ArtifactStore.Arn}/*
+              - Sid: CodeBuild
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                  - iam:PassRole
+                Effect: Allow
+                Resource:
+                  - '*'
 
   CodeBuildProject:
     Type: AWS::CodeBuild::Project
@@ -105,7 +121,7 @@ Resources:
         Type: CODEPIPELINE
       Source:
         Type: CODEPIPELINE
-        BuildSpec: buildspec.yaml
+        BuildSpec: infra/buildspec.yaml
       TimeoutInMinutes: 480
       Environment:
         ComputeType: BUILD_GENERAL1_LARGE
