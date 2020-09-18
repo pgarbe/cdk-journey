@@ -1,8 +1,4 @@
 AWSTemplateFormatVersion: 2010-09-09
-#
-# Change the Description to be a suitable description for your service
-#
-Description: Hello Service
 
 Parameters:
   Repository:
@@ -14,46 +10,10 @@ Parameters:
   DesiredCount:
     Type: Number
     Description: The number of simultaneous tasks that you want to run on the cluster.
-  EnableDataDog:
-    Type: String
-    AllowedValues:
-      - true
-      - false
-    Default: false
-  DataDogApiKey:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /rio/config/datadog-integration/api-key
-  DataDogAppKey:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /rio/config/datadog-integration/application-key
-  DatadogSite:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /rio/config/datadog-integration/site
-  TeamName:
-    Type: AWS::SSM::Parameter::Value<String>
-    Default: /config/team/name
-
-Mappings:
-  #
-  # Change the Config parameters below to match your service
-  #
-  Config:
-    Service:
-      Name: hello-service                 # Change the service name to match your service name
-      Cpu: 960                            # Should be sufficient for most cases but change if you are experiencing CPU problems
-      Memory: 1920                        # Should be sufficient for most cases but change if you are experiencing memory problems
-      FQDN: api.hello.template.rio.cloud  # Change this to be of the format api.<CONTEXT>.rio.cloud where <CONTEXT> is the context name of your service
-    DataDogAgent:
-      Name: hello-service-statsd          # Change this to be the statsd name for your service
-      Cpu: 64
-      Memory: 128
-    Fargate:
-      Cpu: 1024                           # Should be the sum of Service CPU and DataDogAgent CPU (e.g. 960 + 64)
-      Memory: 2048                        # Should be the sum of Service Memory and DataDogAgent Memory (e.g. 1920 + 128)
-    Account:
-      Name: rio-template                  # Change this to be name of the AWS account your service will run under
+    Default: 1
 
 Resources:
+
   FargateExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -67,6 +27,7 @@ Resources:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
   ECSServiceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -93,9 +54,7 @@ Resources:
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
                 Resource:
-                  - !Sub
-                    - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/config/${ServiceName}*
-                    - ServiceName: !FindInMap [Config, Service, Name]
+                  - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/config/cdk-journey*
                   - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/config/application*
               - Effect: Allow
                 Action:
@@ -108,80 +67,42 @@ Resources:
                   -  dynamodb:Get*
                 Resource:
                 - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/permissions/*
+
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !FindInMap [Config, Service, Name]
+      LogGroupName: cdk-journey
       RetentionInDays: 7
-  StatsdLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !FindInMap [Config, DataDogAgent, Name]
-      RetentionInDays: 7
-  LambdaExecutionPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !ImportValue custom-resource-datadog-logforwarder-function-arn
-      Principal: !Sub "logs.${AWS::Region}.amazonaws.com"
-      SourceArn: !GetAtt LogGroup.Arn
-  LogFilter:
-    Type: AWS::Logs::SubscriptionFilter
-    DependsOn: LambdaExecutionPermission
-    Properties:
-      DestinationArn: !ImportValue custom-resource-datadog-logforwarder-function-arn
-      FilterPattern: ""
-      LogGroupName: !Ref LogGroup
-  StatsdLambdaExecutionPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !ImportValue custom-resource-datadog-logforwarder-function-arn
-      Principal: !Sub "logs.${AWS::Region}.amazonaws.com"
-      SourceArn: !GetAtt StatsdLogGroup.Arn
-  StatsdLogFilter:
-    Type: AWS::Logs::SubscriptionFilter
-    DependsOn: StatsdLambdaExecutionPermission
-    Properties:
-      DestinationArn: !ImportValue custom-resource-datadog-logforwarder-function-arn
-      FilterPattern: ""
-      LogGroupName: !Ref StatsdLogGroup
 
   ServiceTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Family: !FindInMap [Config, Service, Name]
-      Cpu: !FindInMap [ Config, Fargate, Cpu ]
-      Memory: !FindInMap [ Config, Fargate, Memory ]
+      Family: cdk-journey
+      Cpu: 1024
+      Memory: 2048
       NetworkMode: awsvpc
       ExecutionRoleArn: !GetAtt FargateExecutionRole.Arn
       TaskRoleArn: !GetAtt ECSServiceRole.Arn
       RequiresCompatibilities:
         - FARGATE
       ContainerDefinitions:
-        - Name: !FindInMap [Config, Service, Name]
-          Cpu: !FindInMap [ Config, Service, Cpu ]
+        - Name: cdk-journey
           Essential: true
           Image: !Sub ${Repository}:${Tag}
           HealthCheck:
             Command:
               - CMD-SHELL
-              - curl --fail --insecure https://localhost/actuator/health
+              - curl --fail --insecure https://localhost/
             Interval: 5
             Retries: 2
             StartPeriod: 180
             Timeout: 2
-          Memory: !FindInMap [ Config, Service, Memory ]
-          Ulimits:
-            - Name: nofile
-              SoftLimit: 16384
-              HardLimit: 32768
           LogConfiguration:
             LogDriver: awslogs
             Options:
               awslogs-group: !Ref LogGroup
               awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: !FindInMap [Config, Service, Name]
+              awslogs-stream-prefix: cdk-journey
           PortMappings:
             - ContainerPort: 80
 
@@ -190,9 +111,8 @@ Resources:
 
   Service:
     Type: AWS::ECS::Service
-    DependsOn: ListenerRule # Avoid race conditions while creating the service
+    DependsOn: LoadbalancerListener
     Properties:
-      ServiceName: !FindInMap [Config, Service, Name]
       Cluster: !Ref Cluster
       LaunchType: FARGATE
       PlatformVersion: 1.4.0
@@ -205,24 +125,21 @@ Resources:
       LoadBalancers:
         - TargetGroupArn: !Ref ServiceTargetGroup
           ContainerPort: 80
-          ContainerName: !FindInMap [Config, Service, Name]
+          ContainerName: cdk-journey
       NetworkConfiguration:
         AwsvpcConfiguration:
-          AssignPublicIp: DISABLED
+          AssignPublicIp: ENABLED
           SecurityGroups:
             - !Ref SecurityGroup
           Subnets:
-            - !ImportValue PrivateSubnet1AID
-            - !ImportValue PrivateSubnet2AID
-            - !ImportValue PrivateSubnet3AID
+            - !ImportValue vpc-SubnetAPublic
+            - !ImportValue vpc-SubnetBPublic
 
   SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: !Sub
-        - ${ServiceName}-task
-        - ServiceName: !FindInMap [Config, Service, Name]
-      VpcId: !ImportValue DefaultVPCId
+      GroupDescription: !Ref AWS::StackName
+      VpcId: !ImportValue vpc-VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
@@ -239,59 +156,48 @@ Resources:
         - Key: deletion_protection.enabled
           Value: true
       Subnets:
-        - !ImportValue PublicSubnet1ID
-        - !ImportValue PublicSubnet2ID
-        - !ImportValue PublicSubnet3ID
+        - !ImportValue vpc-SubnetAPublic
+        - !ImportValue vpc-SubnetBPublic
       Type: application
-
-  ListenerRule:
-    Type: AWS::ElasticLoadBalancingV2::ListenerRule
-    Properties:
-      ListenerArn: !Ref LoadbalancerListener
-      Priority: 2
-      Actions:
-        - TargetGroupArn: !Ref ServiceTargetGroup
-          Type: forward
 
   LoadbalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       LoadBalancerArn: !Ref ElasticLoadBalancer
-      Port: 443
-      Protocol: HTTPS
-      SslPolicy: ELBSecurityPolicy-TLS-1-2-2017-01
+      Port: 80
+      Protocol: HTTP
       DefaultActions:
         - TargetGroupArn: !Ref ServiceTargetGroup
           Type: forward
-      Certificates:
-        - CertificateArn: !Ref LoadBalancerAcmCertificate
+      # Certificates:
+      #   - CertificateArn: !Ref LoadBalancerAcmCertificate
 
   ServiceTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:
       HealthCheckIntervalSeconds: 5
-      HealthCheckPath: /actuator/health
+      HealthCheckPath: /
       HealthCheckTimeoutSeconds: 2
       HealthyThresholdCount: 2
       Matcher:
         HttpCode: 200
-      Port: 443
-      Protocol: HTTPS
+      Port: 80
+      Protocol: HTTP
       TargetGroupAttributes:
         - Key: deregistration_delay.timeout_seconds
           Value: 15
       UnhealthyThresholdCount: 5
-      VpcId: !ImportValue DefaultVPCId
+      VpcId: !ImportValue vpc-VPC
       TargetType: ip
 
-  LoadBalancerAcmCertificate:
-    Type: AWS::CertificateManager::Certificate
-    Properties:
-      DomainName: !FindInMap [Config, Service, FQDN]
-      ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !FindInMap [Config, Service, FQDN]
-          HostedZoneId: !ImportValue Landing-Zone-HostedZoneId
+  # LoadBalancerAcmCertificate:
+  #   Type: AWS::CertificateManager::Certificate
+  #   Properties:
+  #     DomainName: cdk-journey
+  #     ValidationMethod: DNS
+  #     DomainValidationOptions:
+  #       - DomainName: cdk-journey
+  #         HostedZoneId: !ImportValue zone-HostedZoneId
 
   LoadBalancerRecordSet:
     Type: AWS::Route53::RecordSet
@@ -299,7 +205,6 @@ Resources:
       AliasTarget:
         DNSName: !GetAtt ElasticLoadBalancer.DNSName
         HostedZoneId: !GetAtt ElasticLoadBalancer.CanonicalHostedZoneID
-      HostedZoneId: !ImportValue Landing-Zone-HostedZoneId
+      HostedZoneId: !ImportValue zone-HostedZoneId
       Comment: A records for service
-      Name: !FindInMap [Config, Service, FQDN]
       Type: A
