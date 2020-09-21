@@ -7,7 +7,7 @@ interface InfrastructureStackProps extends cdk.StackProps {
 }
 
 export class InfrastructureStack extends cdk.Stack {
-    constructor(scope: cdk.Construct, id: string, props?: InfrastructureStackProps) {
+    constructor(scope: cdk.Construct, id: string, props: InfrastructureStackProps) {
         super(scope, id, props);
 
         const stack = new cfn_inc.CfnInclude(this, 'Template', {

@@ -11,11 +11,11 @@ interface CdkJourneyApplicationProps extends cdk.StageProps {
 }
 
 class CdkJourneyApplication extends cdk.Stage {
-    constructor(scope: cdk.Construct, id: string, props?: CdkJourneyApplicationProps) {
+    constructor(scope: cdk.Construct, id: string, props: CdkJourneyApplicationProps) {
         super(scope, id, props);
 
         new InfrastructureStack(this, 'cdk-journey', { 
-            repositoryUri: '',
+            repositoryUri: props.repositoryUri,
             stackName: 'cdk-journey' 
         });
     }
