@@ -1,22 +1,20 @@
-import { beASupersetOfTemplate, deepObjectLike, expect as expectCDK, haveResource, haveResourceLike, MatchStyle, matchTemplate } from '@aws-cdk/assert';
+import { beASupersetOfTemplate, expect as expectCDK, MatchStyle, matchTemplate } from '@aws-cdk/assert';
 import * as cdk from '@aws-cdk/core';
 import * as Infrastructure from '../lib/infrastructure';
 
 test('Keeps Route53 resource untouched', () => {
-    const app = new cdk.App();
 
     // WHEN
-    const stack = new Infrastructure.InfrastructureStack(app, 'MyTestStack');
+    const app = new cdk.App();
+    const stack = new Infrastructure.InfrastructureStack(app, 'MyTestStack', { repositoryUri: ''});
 
     // THEN
     expectCDK(stack).to(matchTemplate({
-        Resources: {
-            LoadBalancerRecordSet: {
-                Type: "AWS::Route53::RecordSet",
-                Properties: {
-                    Name: "cdk-journey.aws.garbe.io",
-                }
+        "LoadBalancerRecordSet": {
+            "Type": "AWS::Route53::RecordSet",
+            "Properties": {
+                "Name": "cdk-journeyXXX.aws.garbe.io",
             }
         }
-    }, MatchStyle.SUPERSET)); 
+    }, MatchStyle.NO_REPLACES)); 
 });
