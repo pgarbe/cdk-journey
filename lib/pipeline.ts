@@ -72,7 +72,7 @@ export class PipelineStack extends cdk.Stack {
             adminPermissions: true,
             capabilities: [cfn.CloudFormationCapabilities.NAMED_IAM],
             parameterOverrides: {
-                Repository: ecrRepo.repositoryName,
+                Repository: ecrRepo.repositoryUri,
                 Tag: buildArtifact.getParam('parameters.json', 'Tag'),
             },            
         }))
