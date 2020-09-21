@@ -47,36 +47,8 @@ Resources:
                 - cloudformation.amazonaws.com
             Action:
               - sts:AssumeRole
-      Policies:
-        - PolicyName: "Additional_Permissions"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action: "secretsmanager:GetRandomPassword"
-                Resource: "*"
-              - Effect: "Allow"
-                Action: "acm:*"
-                Resource: "*"
-              - Effect: "Allow"
-                Action:
-                  - rds:AddTagsToResource
-                  - rds:AuthorizeDBSecurityGroupIngress
-                  - rds:CreateDB*
-                  - rds:DeleteDB*
-                  - rds:ModifyDB*
-                  - rds:RemoveTagsFromResource
-                  - rds:RevokeDBSecurityGroupIngress
-                Resource: !Sub arn:aws:rds:${AWS::Region}:${AWS::AccountId}:*:*
-              - Effect: "Allow"
-                Action:
-                  - rds:Describe*
-                Resource: "*"
-              - Effect: "Allow"
-                Action:
-                - dynamodb:PutItem
-                - dynamodb:DeleteItem
-                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/*
+      ManagedPolicyArns:
+        -  arn:aws:iam::aws:policy/AdministratorAccess 
 
   CodePipelineRole:
     Type: AWS::IAM::Role
