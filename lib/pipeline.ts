@@ -53,6 +53,7 @@ export class PipelineStack extends cdk.Stack {
                 },
             },
         });
+        ecrRepo.grantPullPush(buildSpecBuild);
 
         const buildStage = pipeline.addStage('BuildApp');
         buildStage.addActions(new codepipeline_actions.CodeBuildAction({
