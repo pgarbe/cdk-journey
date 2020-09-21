@@ -202,6 +202,7 @@ Resources:
   LoadBalancerRecordSet:
     Type: AWS::Route53::RecordSet
     Properties:
+      Name: cdk-journey
       AliasTarget:
         DNSName: !GetAtt ElasticLoadBalancer.DNSName
         HostedZoneId: !GetAtt ElasticLoadBalancer.CanonicalHostedZoneID
