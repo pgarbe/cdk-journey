@@ -6,12 +6,18 @@ import * as ecr from "@aws-cdk/aws-ecr";
 import * as pipelines from "@aws-cdk/pipelines";
 import { InfrastructureStack } from "./infrastructure";
 
+interface CdkJourneyApplicationProps extends cdk.StageProps {
+    readonly repositoryUri: string;
+}
+
 class CdkJourneyApplication extends cdk.Stage {
-    constructor(scope: cdk.Construct, id: string, props?: cdk.StageProps) {
+    constructor(scope: cdk.Construct, id: string, props?: CdkJourneyApplicationProps) {
         super(scope, id, props);
 
-        // fargateBuildOutput.getParam('parameters.json', 'Tag') 
-        new InfrastructureStack(this, 'cdk-journey', { stackName: 'cdk-journey' });
+        new InfrastructureStack(this, 'cdk-journey', { 
+            repositoryUri: '',
+            stackName: 'cdk-journey' 
+        });
     }
 }
 
@@ -73,6 +79,8 @@ export class PipelineStack extends cdk.Stack {
             outputs: [buildArtifact]
         }));
 
-        pipeline.addApplicationStage(new CdkJourneyApplication(this, 'Prod', {}));
+        pipeline.addApplicationStage(new CdkJourneyApplication(this, 'Prod', {
+            repositoryUri: ecrRepo.repositoryUri
+        }));
     }
 }

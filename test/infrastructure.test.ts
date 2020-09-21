@@ -1,4 +1,4 @@
-import { beASupersetOfTemplate, deepObjectLike, expect as expectCDK, haveResource, haveResourceLike, matchTemplate } from '@aws-cdk/assert';
+import { beASupersetOfTemplate, deepObjectLike, expect as expectCDK, haveResource, haveResourceLike, MatchStyle, matchTemplate } from '@aws-cdk/assert';
 import * as cdk from '@aws-cdk/core';
 import * as Infrastructure from '../lib/infrastructure';
 
@@ -18,5 +18,5 @@ test('Keeps Route53 resource untouched', () => {
                 }
             }
         }
-    })); 
+    }, MatchStyle.SUPERSET)); 
 });
