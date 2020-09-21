@@ -1,11 +1,19 @@
 import * as cdk from "@aws-cdk/core"
-import * as cfn from "@aws-cdk/aws-cloudformation";
 import * as codebuild from "@aws-cdk/aws-codebuild";
 import * as codepipeline from "@aws-cdk/aws-codepipeline";
 import * as codepipeline_actions from "@aws-cdk/aws-codepipeline-actions";
 import * as ecr from "@aws-cdk/aws-ecr";
 import * as pipelines from "@aws-cdk/pipelines";
+import { InfrastructureStack } from "./infrastructure";
 
+class CdkJourneyApplication extends cdk.Stage {
+    constructor(scope: cdk.Construct, id: string, props?: cdk.StageProps) {
+        super(scope, id, props);
+
+        // fargateBuildOutput.getParam('parameters.json', 'Tag') 
+        new InfrastructureStack(this, 'cdk-journey', { stackName: 'cdk-journey' });
+    }
+}
 
 export class PipelineStack extends cdk.Stack {
     constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
@@ -31,11 +39,13 @@ export class PipelineStack extends cdk.Stack {
                 oauthToken: cdk.SecretValue.secretsManager('GitHubToken'),
                 owner: 'pgarbe',
                 repo: 'cdk-journey',
-                branch: 'step1'
+                branch: 'step2'
             }),
 
             synthAction: pipelines.SimpleSynthAction.standardNpmSynth({
-                environment: { buildImage: codebuild.LinuxBuildImage.STANDARD_4_0 },
+                environment: { 
+                    buildImage: codebuild.LinuxBuildImage.STANDARD_4_0,
+                },
                 sourceArtifact: sourceArtifact,
                 cloudAssemblyArtifact,
                 buildCommand: 'npm run build',
@@ -63,19 +73,6 @@ export class PipelineStack extends cdk.Stack {
             outputs: [buildArtifact]
         }));
 
-        const deployStage = pipeline.addStage('DeployApp');
-        deployStage.addActions(new codepipeline_actions.CloudFormationCreateUpdateStackAction({
-            actionName: 'DeployApp',
-            templatePath: buildArtifact.atPath('cf-template.yaml'),
-            templateConfiguration: buildArtifact.atPath('cf-template.config'),
-            stackName: 'cdk-journey',
-            adminPermissions: true,
-            capabilities: [cfn.CloudFormationCapabilities.NAMED_IAM],
-            parameterOverrides: {
-                Repository: ecrRepo.repositoryUri,
-                Tag: buildArtifact.getParam('parameters.json', 'Tag'),
-            },            
-        }))
-
+        pipeline.addApplicationStage(new CdkJourneyApplication(this, 'Prod', {}));
     }
 }

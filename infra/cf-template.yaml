@@ -154,7 +154,7 @@ Resources:
         - !Ref SecurityGroup
       LoadBalancerAttributes:
         - Key: deletion_protection.enabled
-          Value: true
+          Value: 'true'
       Subnets:
         - !ImportValue vpc-SubnetAPublic
         - !ImportValue vpc-SubnetBPublic
