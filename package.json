@@ -1,0 +1,30 @@
+{
+  "name": "cdk-journey",
+  "version": "0.1.0",
+  "bin": {
+    "app": "bin/app.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk"
+  },
+  "devDependencies": {
+    "@aws-cdk/assert": "1.63.0",
+    "@types/jest": "^26.0.14",
+    "@types/node": "14.11.1",
+    "jest": "^26.4.2",
+    "ts-jest": "^26.3.0",
+    "aws-cdk": "1.63.0",
+    "ts-node": "^9.0.0",
+    "typescript": "~4.0.2"
+  },
+  "dependencies": {
+    "@aws-cdk/core": "1.63.0",
+    "@aws-cdk/aws-codebuild": "1.63.0",
+    "@aws-cdk/aws-codepipeline": "1.63.0",
+    "@aws-cdk/aws-codepipeline-actions": "1.63.0",
+    "@aws-cdk/pipelines": "1.63.0"
+  }
+}
