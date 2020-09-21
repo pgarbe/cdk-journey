@@ -52,7 +52,7 @@ export class PipelineStack extends cdk.Stack {
                 },
                 sourceArtifact: sourceArtifact,
                 cloudAssemblyArtifact,
-                buildCommand: 'npm run build',
+                buildCommand: 'npm run build && npm run test',
             }),
         });
 
