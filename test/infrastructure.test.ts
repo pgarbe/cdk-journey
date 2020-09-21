@@ -6,15 +6,15 @@ test('Keeps Route53 resource untouched', () => {
 
     // WHEN
     const app = new cdk.App();
-    const stack = new Infrastructure.InfrastructureStack(app, 'MyTestStack', { repositoryUri: ''});
+    const stack = new Infrastructure.InfrastructureStack(app, 'MyTestStack');
 
     // THEN
     expectCDK(stack).to(matchTemplate({
         "LoadBalancerRecordSet": {
             "Type": "AWS::Route53::RecordSet",
             "Properties": {
-                "Name": "cdk-journeyXXX.aws.garbe.io",
+                "Name": "cdk-journey.aws.garbe.io",
             }
         }
-    }, MatchStyle.NO_REPLACES)); 
+    }, MatchStyle.SUPERSET)); 
 });

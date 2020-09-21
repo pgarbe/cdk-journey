@@ -6,16 +6,11 @@ import * as ecr from "@aws-cdk/aws-ecr";
 import * as pipelines from "@aws-cdk/pipelines";
 import { InfrastructureStack } from "./infrastructure";
 
-interface CdkJourneyApplicationProps extends cdk.StageProps {
-    readonly repositoryUri: string;
-}
-
 class CdkJourneyApplication extends cdk.Stage {
-    constructor(scope: cdk.Construct, id: string, props: CdkJourneyApplicationProps) {
+    constructor(scope: cdk.Construct, id: string, props?: cdk.StageProps) {
         super(scope, id, props);
 
         new InfrastructureStack(this, 'cdk-journey', { 
-            repositoryUri: props.repositoryUri,
             stackName: 'cdk-journey' 
         });
     }
@@ -50,6 +45,9 @@ export class PipelineStack extends cdk.Stack {
 
             synthAction: pipelines.SimpleSynthAction.standardNpmSynth({
                 environment: { 
+                    environmentVariables: {
+                        IMAGE_REPO_URI: { value: ecrRepo.repositoryUri },
+                    },
                     buildImage: codebuild.LinuxBuildImage.STANDARD_4_0,
                 },
                 sourceArtifact: sourceArtifact,
@@ -79,8 +77,6 @@ export class PipelineStack extends cdk.Stack {
             outputs: [buildArtifact]
         }));
 
-        pipeline.addApplicationStage(new CdkJourneyApplication(this, 'Prod', {
-            repositoryUri: ecrRepo.repositoryUri
-        }));
+        pipeline.addApplicationStage(new CdkJourneyApplication(this, 'Prod'));
     }
 }
