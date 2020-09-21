@@ -31,6 +31,7 @@ export class PipelineStack extends cdk.Stack {
                 oauthToken: cdk.SecretValue.secretsManager('GitHubToken'),
                 owner: 'pgarbe',
                 repo: 'cdk-journey',
+                branch: 'step1'
             }),
 
             synthAction: pipelines.SimpleSynthAction.standardNpmSynth({
