@@ -5,8 +5,8 @@ import { PipelineStack } from '../lib/pipeline';
 
 const app = new App();
 new PipelineStack(app, 'cdk-journey-pipeline-cdk', {   env: { 
-    account: process.env.CDK_DEFAULT_ACCOUNT, 
-    region: process.env.CDK_DEFAULT_REGION 
+    account: process.env.CDK_DEFAULT_ACCOUNT || '424144556073', 
+    region: process.env.CDK_DEFAULT_REGION || 'eu-west-1'
 }});
 
 // Enable ot run a local `cdk diff`
