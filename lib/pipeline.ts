@@ -11,10 +11,6 @@ class CdkJourneyApplication extends cdk.Stage {
 
         new InfrastructureStack(this, 'cdk-journey', { 
             stackName: 'cdk-journey',
-            env: { 
-                account: '424144556073', // cdk.Stack.of(scope).account, 
-                region: 'eu-west-1', // cdk.Stack.of(scope).region
-            }
         });
     }
 }
@@ -48,6 +44,11 @@ export class PipelineStack extends cdk.Stack {
             }),
         });
 
-        pipeline.addApplicationStage(new CdkJourneyApplication(this, 'Prod'));
+        pipeline.addApplicationStage(new CdkJourneyApplication(this, 'Prod', {
+            env: { 
+                account: '424144556073', // cdk.Stack.of(scope).account, 
+                region: 'eu-west-1', // cdk.Stack.of(scope).region
+            }
+        }));
     }
 }
