@@ -9,23 +9,42 @@ test('Keeps Route53 resource untouched', () => {
     const stack = new Infrastructure.InfrastructureStack(app, 'MyTestStack');
 
     expectCDK(stack).to(haveResourceLike('AWS::Route53::RecordSet', {
-        "Name": "cdk-journey.aws.garbe.io",
+
+        "Name": {
+            "Fn::Join": [
+                "",
+                [
+                    "cdk-journey.",
+                    {
+                        "Fn::ImportValue": "zone-HostedZoneName"
+                    },
+                    "."
+                ]
+            ]
+        },
         "Type": "A",
         "AliasTarget": {
             "DNSName": {
-                "Fn::GetAtt": [
-                    "ElasticLoadBalancer",
-                    "DNSName"
+                "Fn::Join": [
+                    "",
+                    [
+                    "dualstack.",
+                        {
+                            "Fn::GetAtt": [
+                            "cdkjourneyLB04FA863A",
+                            "DNSName"
+                            ]
+                        }
+                    ]
                 ]
             },
             "HostedZoneId": {
                 "Fn::GetAtt": [
-                    "ElasticLoadBalancer",
+                    "cdkjourneyLB04FA863A",
                     "CanonicalHostedZoneID"
                 ]
             }
         },
-        "Comment": "A records for service",
         "HostedZoneId": {
             "Fn::ImportValue": "zone-HostedZoneId"
         }

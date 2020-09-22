@@ -4,13 +4,13 @@ import * as ecs from '@aws-cdk/aws-ecs';
 import * as ecs_patterns from '@aws-cdk/aws-ecs-patterns';
 import * as route53 from '@aws-cdk/aws-route53';
 import * as alias from  '@aws-cdk/aws-route53-targets';
-import { CfnRecordSet } from '@aws-cdk/aws-route53';
 
 export class InfrastructureStack extends cdk.Stack {
     constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
         super(scope, id, props);
 
         const vpc = WiddixTemplates.get2AzVpc(this);
+        const hostedZone = WiddixTemplates.getHostedZone(this);
 
         const taskDefinition = new ecs.TaskDefinition(this, 'TaskDef', {
             cpu: '1024',
@@ -34,12 +34,9 @@ export class InfrastructureStack extends cdk.Stack {
 
         const fargateService = new ecs_patterns.ApplicationLoadBalancedFargateService(this, 'cdk-journey', {
             vpc,
-            taskDefinition
+            taskDefinition,
         });
-
-        // const recordSet = new route53.RecordSet(this, 'recordSet', {
-        const hostedZone = WiddixTemplates.getHostedZone(this);
-
+        
         const recordSet = new route53.ARecord(this, 'AliasRecord', {
             zone: hostedZone,
             recordName: 'cdk-journey',
@@ -47,7 +44,7 @@ export class InfrastructureStack extends cdk.Stack {
         });
 
         // Keep the logical Id
-        (recordSet.node.defaultChild as CfnRecordSet).overrideLogicalId('LoadBalancerRecordSet');
+        (recordSet.node.defaultChild as route53.CfnRecordSet).overrideLogicalId('LoadBalancerRecordSet');
     }
 }
 
@@ -58,7 +55,7 @@ export class WiddixTemplates {
         return route53.HostedZone.fromHostedZoneAttributes(scope, 'HostedZone', 
         {
             hostedZoneId: cdk.Fn.importValue('zone-HostedZoneId'),
-            zoneName: cdk.Fn.importValue('zone-HostedZoneId'),
+            zoneName: cdk.Fn.importValue('zone-HostedZoneName'),
         });
     }
 
