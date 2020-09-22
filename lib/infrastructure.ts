@@ -4,6 +4,7 @@ import * as ecs from '@aws-cdk/aws-ecs';
 import * as ecs_patterns from '@aws-cdk/aws-ecs-patterns';
 import * as route53 from '@aws-cdk/aws-route53';
 import * as alias from  '@aws-cdk/aws-route53-targets';
+import { Watchful } from 'cdk-watchful/lib/watchful';
 
 export class InfrastructureStack extends cdk.Stack {
     constructor(scope: cdk.Construct, id: string, props?: cdk.StackProps) {
@@ -36,7 +37,13 @@ export class InfrastructureStack extends cdk.Stack {
             vpc,
             taskDefinition,
         });
-        
+
+        // Automatically scale based on CPU utilization
+        const scaling = fargateService.service.autoScaleTaskCount({ maxCapacity: 10 });
+            scaling.scaleOnCpuUtilization('CpuScaling', {
+            targetUtilizationPercent: 80
+        });
+
         const recordSet = new route53.ARecord(this, 'AliasRecord', {
             zone: hostedZone,
             recordName: 'cdk-journey',
@@ -45,6 +52,12 @@ export class InfrastructureStack extends cdk.Stack {
 
         // Keep the logical Id
         (recordSet.node.defaultChild as route53.CfnRecordSet).overrideLogicalId('LoadBalancerRecordSet');
+
+        // Add alarms for generated resources
+        const wf = new Watchful(this, 'watchful', {
+            alarmEmail: 'cdk-journey-alarm@garbe.io'
+        });
+        wf.watchScope(this);
     }
 }
 
