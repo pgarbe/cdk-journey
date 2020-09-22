@@ -10,7 +10,11 @@ class CdkJourneyApplication extends cdk.Stage {
         super(scope, id, props);
 
         new InfrastructureStack(this, 'cdk-journey', { 
-            stackName: 'cdk-journey' 
+            stackName: 'cdk-journey',
+            env: { 
+                account: '424144556073', // cdk.Stack.of(scope).account, 
+                region: 'eu-west-1', // cdk.Stack.of(scope).region
+            }
         });
     }
 }

@@ -4,10 +4,13 @@ import { InfrastructureStack } from "../lib/infrastructure";
 import { PipelineStack } from '../lib/pipeline';
 
 const app = new App();
-new PipelineStack(app, 'cdk-journey-pipeline-cdk', {   env: { 
-    account: process.env.CDK_DEFAULT_ACCOUNT || '424144556073', 
-    region: process.env.CDK_DEFAULT_REGION || 'eu-west-1'
-}});
+new PipelineStack(app, 'cdk-journey-pipeline-cdk', { 
+    env: { 
+        account: '424144556073', // cdk.Stack.of(scope).account, 
+        region: 'eu-west-1', // cdk.Stack.of(scope).region
+    }
+
+});
 
 // Enable ot run a local `cdk diff`
 // new InfrastructureStack(app, 'cdk-journey', { stackName: 'cdk-journey'});
