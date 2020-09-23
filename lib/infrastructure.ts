@@ -21,7 +21,7 @@ export class InfrastructureStack extends cdk.Stack {
             healthCheck: {
                 command: [
                     'CMD-SHELL',
-                    'curl --fail --insecure https://localhost/'
+                    'curl --fail http://localhost/'
                 ],
                 interval: cdk.Duration.seconds(5),
                 retries: 2,
