@@ -144,7 +144,6 @@ Resources:
                 Branch: master
                 OAuthToken: '{{resolve:secretsmanager:GitHubToken:SecretString}}'
                 PollForSourceChanges: false
-
         - Name: Build
           Actions:
             - Name: Build

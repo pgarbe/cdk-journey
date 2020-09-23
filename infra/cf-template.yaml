@@ -92,7 +92,7 @@ Resources:
           HealthCheck:
             Command:
               - CMD-SHELL
-              - curl --fail --insecure https://localhost/
+              - curl --fail http://localhost/
             Interval: 5
             Retries: 2
             StartPeriod: 180
